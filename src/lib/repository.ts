@@ -1,0 +1,127 @@
+import { db, type SettingRecord, type Settings, type SettingKey } from '@/lib/db';
+import { AppError } from '@/lib/errors';
+import { addDaysToDateKey, wallTimeToMs } from '@/lib/time';
+
+export interface RateInput {
+  effectiveFrom: number;
+  piastresPerHour: number;
+  note: string;
+}
+
+function assertValidInterval(startedAt: number, endedAt: number) {
+  if (endedAt <= startedAt) {
+    throw new AppError('وقت المغادرة لازم يكون بعد وقت الوصول');
+  }
+  if (endedAt > Date.now()) {
+    throw new AppError('وقت المغادرة مينفعش يكون في المستقبل');
+  }
+}
+
+async function assertNoOverlap(startedAt: number, endedAt: number, ignoreId?: number) {
+  const overlap = await db.sessions
+    .filter(
+      (session) =>
+        session.id !== ignoreId &&
+        session.startedAt < endedAt &&
+        (session.endedAt ?? Infinity) > startedAt,
+    )
+    .first();
+  if (overlap) {
+    throw new AppError('الوقت ده بيتقاطع مع يوم شغل تاني');
+  }
+}
+
+export async function startSession(startedAt: number): Promise<number> {
+  return db.transaction('rw', db.sessions, async () => {
+    const open = await db.sessions.filter((session) => session.endedAt === null).first();
+    if (open) {
+      throw new AppError('فيه يوم شغل مفتوح بالفعل');
+    }
+    return db.sessions.add({ startedAt, endedAt: null });
+  });
+}
+
+export async function endSession(id: number, endedAt: number): Promise<void> {
+  await db.transaction('rw', db.sessions, async () => {
+    const session = await db.sessions.get(id);
+    if (!session || session.endedAt !== null) {
+      throw new AppError('اليوم ده مش مفتوح');
+    }
+    assertValidInterval(session.startedAt, endedAt);
+    await assertNoOverlap(session.startedAt, endedAt, id);
+    await db.sessions.update(id, { endedAt });
+  });
+}
+
+export async function updateSession(id: number, startedAt: number, endedAt: number): Promise<void> {
+  await db.transaction('rw', db.sessions, async () => {
+    const session = await db.sessions.get(id);
+    if (!session || session.endedAt === null) {
+      throw new AppError('اليوم ده مش موجود');
+    }
+    assertValidInterval(startedAt, endedAt);
+    await assertNoOverlap(startedAt, endedAt, id);
+    await db.sessions.update(id, { startedAt, endedAt });
+  });
+}
+
+export async function deleteSession(id: number): Promise<void> {
+  await db.sessions.delete(id);
+}
+
+async function assertRateStartIsFree(effectiveFrom: number, ignoreId?: number) {
+  const clash = await db.rates.where('effectiveFrom').equals(effectiveFrom).first();
+  if (clash && clash.id !== ignoreId) {
+    throw new AppError('فيه سعر بيبدأ في اليوم ده بالفعل');
+  }
+}
+
+export async function addRate(input: RateInput): Promise<void> {
+  await db.transaction('rw', db.rates, async () => {
+    await assertRateStartIsFree(input.effectiveFrom);
+    await db.rates.add(input);
+  });
+}
+
+export async function updateRate(id: number, input: RateInput): Promise<void> {
+  await db.transaction('rw', db.rates, async () => {
+    await assertRateStartIsFree(input.effectiveFrom, id);
+    await db.rates.update(id, input);
+  });
+}
+
+export async function addLeave(dateKey: string): Promise<void> {
+  await db.transaction('rw', [db.leaves, db.sessions], async () => {
+    const existing = await db.leaves.where('date').equals(dateKey).first();
+    if (existing) {
+      throw new AppError('الإجازة دي متسجلة قبل كده');
+    }
+    const dayStart = wallTimeToMs(dateKey, 0, 0);
+    const dayEnd = wallTimeToMs(addDaysToDateKey(dateKey, 1), 0, 0);
+    const worked = await db.sessions.where('startedAt').between(dayStart, dayEnd, true, false).count();
+    if (worked > 0) {
+      throw new AppError('فيه شغل متسجل في اليوم ده، مينفعش تسجله إجازة');
+    }
+    await db.leaves.add({ date: dateKey });
+  });
+}
+
+export async function deleteLeave(id: number): Promise<void> {
+  await db.leaves.delete(id);
+}
+
+export async function saveSettings(values: Settings): Promise<void> {
+  const rows: SettingRecord[] = (Object.keys(values) as SettingKey[]).map((key) => ({
+    key,
+    value: values[key],
+  }));
+  await db.settings.bulkPut(rows);
+}
+
+export function toSettings(rows: SettingRecord[], defaults: Settings): Settings {
+  const settings = { ...defaults };
+  for (const row of rows) {
+    settings[row.key] = row.value;
+  }
+  return settings;
+}
