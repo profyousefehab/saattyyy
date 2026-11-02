@@ -1,6 +1,6 @@
 import { db, type SettingRecord, type Settings, type SettingKey } from '@/lib/db';
 import { AppError } from '@/lib/errors';
-import { addDaysToDateKey, wallTimeToMs } from '@/lib/time';
+import { addDaysToDateKey, cairoDateKey, wallTimeToMs } from '@/lib/time';
 
 export interface RateInput {
   effectiveFrom: number;
@@ -62,6 +62,18 @@ export async function updateSession(id: number, startedAt: number, endedAt: numb
     assertValidInterval(startedAt, endedAt);
     await assertNoOverlap(startedAt, endedAt, id);
     await db.sessions.update(id, { startedAt, endedAt });
+  });
+}
+
+export async function addManualSession(startedAt: number, endedAt: number): Promise<void> {
+  await db.transaction('rw', [db.sessions, db.leaves], async () => {
+    assertValidInterval(startedAt, endedAt);
+    await assertNoOverlap(startedAt, endedAt);
+    const leave = await db.leaves.where('date').equals(cairoDateKey(startedAt)).first();
+    if (leave) {
+      throw new AppError('اليوم ده متسجل إجازة، مينفعش تسجله شغل');
+    }
+    await db.sessions.add({ startedAt, endedAt });
   });
 }
 

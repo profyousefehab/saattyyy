@@ -10,6 +10,7 @@ import { formatDuration, formatEgp } from '@/lib/format';
 import { cairoMonthKey, formatClock, formatDayLabel } from '@/lib/time';
 import { EditSessionSheet } from '@/features/log/EditSessionSheet';
 import { LeaveSheet } from '@/features/log/LeaveSheet';
+import { ManualSessionSheet } from '@/features/log/ManualSessionSheet';
 
 interface LogItem {
   key: string;
@@ -26,6 +27,7 @@ export function WorkLogScreen() {
   const [monthKey, setMonthKey] = useState(currentMonth);
   const [selected, setSelected] = useState<WorkSession | null>(null);
   const [leaveOpen, setLeaveOpen] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
 
   if (!ledger) return null;
 
@@ -60,6 +62,11 @@ export function WorkLogScreen() {
       <div className="mt-5">
         <MonthSwitcher monthKey={monthKey} currentMonthKey={currentMonth} onChange={setMonthKey} />
       </div>
+
+      <Button variant="secondary" block className="mt-4" onClick={() => setManualOpen(true)}>
+        <CalendarPlus size={18} />
+        تسجيل يوم شغل فات
+      </Button>
 
       <Card className="mt-4 grid grid-cols-3 gap-2 px-4 py-4 text-center">
         <div>
@@ -102,6 +109,7 @@ export function WorkLogScreen() {
       )}
 
       {selected && <EditSessionSheet key={selected.id} session={selected} onClose={() => setSelected(null)} />}
+      {manualOpen && <ManualSessionSheet onClose={() => setManualOpen(false)} />}
       {leaveOpen && (
         <LeaveSheet leaves={ledger.leaves} allowance={ledger.settings.leaveAllowance} onClose={() => setLeaveOpen(false)} />
       )}
