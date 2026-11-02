@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { IconButton } from '@/components/ui';
 
@@ -9,9 +9,12 @@ interface SheetProps {
 }
 
 export function Sheet({ title, onClose, children }: SheetProps) {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onCloseRef.current();
     };
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -20,7 +23,7 @@ export function Sheet({ title, onClose, children }: SheetProps) {
       window.removeEventListener('keydown', handleKey);
       document.body.style.overflow = previousOverflow;
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center">
