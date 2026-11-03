@@ -19,6 +19,7 @@ import { ActiveSessionCard } from '@/features/home/ActiveSessionCard';
 import { StaleSessionCard } from '@/features/home/StaleSessionCard';
 import { TodayStats, LeaveBalance } from '@/features/home/TodayStats';
 import { SessionSummarySheet, type SessionSummary } from '@/features/home/SessionSummarySheet';
+import { EditSessionSheet } from '@/features/log/EditSessionSheet';
 
 interface HomeScreenProps {
   onOpenSettings: () => void;
@@ -30,6 +31,7 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<SessionSummary | null>(null);
+  const [editingActive, setEditingActive] = useState(false);
 
   const todayKey = cairoDateKey(now);
   const monthKey = cairoMonthKey(now);
@@ -129,7 +131,12 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
           <StaleSessionCard session={stale} />
         ) : (
           <>
-            <ActiveSessionCard active={active} rates={ledger.rates} now={now} />
+            <ActiveSessionCard
+              active={active}
+              rates={ledger.rates}
+              now={now}
+              onEdit={() => setEditingActive(true)}
+            />
             <Button block className="h-14 text-base" disabled={busy} onClick={active ? handleEnd : handleStart}>
               {active ? <Square size={18} strokeWidth={2} /> : <Play size={18} strokeWidth={2} />}
               {active ? 'إنهاء اليوم' : 'بدء اليوم'}
@@ -142,6 +149,13 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
       </div>
 
       <SessionSummarySheet summary={summary} onClose={() => setSummary(null)} />
+      {editingActive && active && (
+        <EditSessionSheet
+          session={active}
+          rates={ledger.rates}
+          onClose={() => setEditingActive(false)}
+        />
+      )}
     </div>
   );
 }

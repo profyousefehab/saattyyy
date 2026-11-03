@@ -83,17 +83,49 @@ export async function endSession(id: number, endedAt: number): Promise<void> {
   });
 }
 
-export async function updateSession(id: number, startedAt: number, endedAt: number): Promise<void> {
+export async function updateSession(
+  id: number,
+  startedAt: number,
+  endedAt: number | null,
+): Promise<void> {
   await ensureDbOpen();
-  await db.transaction('rw', db.sessions, async () => {
+  await db.transaction('rw', [db.sessions, db.leaves], async () => {
     const session = await db.sessions.get(id);
-    if (!session || session.endedAt === null) {
+    if (!session) {
       throw new AppError('اليوم ده مش موجود');
     }
-    assertValidInterval(startedAt, endedAt);
-    await assertNoOverlap(startedAt, endedAt, id);
-    await db.sessions.update(id, { startedAt, endedAt });
+
+    if (!Number.isFinite(startedAt) || startedAt <= 0) {
+      throw new AppError('اكتب التاريخ والوقت كاملين');
+    }
+
+    if (startedAt > Date.now() + 1000) {
+      throw new AppError('وقت الوصول مينفعش يكون في المستقبل');
+    }
+
+    const leave = await db.leaves.where('date').equals(cairoDateKey(startedAt)).first();
+    if (leave) {
+      throw new AppError('اليوم ده متسجل إجازة، مينفعش تسجله شغل');
+    }
+
+    if (endedAt === null) {
+      // Editing an active session's start time
+      await assertNoOverlap(startedAt, Date.now(), id);
+      await db.sessions.update(id, { startedAt });
+    } else {
+      // Editing a completed session's start and end times
+      if (!Number.isFinite(endedAt) || endedAt <= 0) {
+        throw new AppError('اكتب التاريخ والوقت كاملين');
+      }
+      assertValidInterval(startedAt, endedAt);
+      await assertNoOverlap(startedAt, endedAt, id);
+      await db.sessions.update(id, { startedAt, endedAt });
+    }
   });
+}
+
+export async function updateActiveSession(id: number, startedAt: number): Promise<void> {
+  return updateSession(id, startedAt, null);
 }
 
 export async function addManualSession(startedAt: number, endedAt: number): Promise<void> {

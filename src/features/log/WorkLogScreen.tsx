@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CalendarPlus } from 'lucide-react';
+import { CalendarPlus, Pencil } from 'lucide-react';
 import { Button, Card } from '@/components/ui';
 import { MonthSwitcher } from '@/components/MonthSwitcher';
 import { useLedger } from '@/hooks/useLedger';
@@ -108,7 +108,14 @@ export function WorkLogScreen() {
         </ul>
       )}
 
-      {selected && <EditSessionSheet key={selected.id} session={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <EditSessionSheet
+          key={selected.id}
+          session={selected}
+          rates={ledger.rates}
+          onClose={() => setSelected(null)}
+        />
+      )}
       {manualOpen && <ManualSessionSheet onClose={() => setManualOpen(false)} />}
       {leaveOpen && (
         <LeaveSheet leaves={ledger.leaves} allowance={ledger.settings.leaveAllowance} onClose={() => setLeaveOpen(false)} />
@@ -119,28 +126,38 @@ export function WorkLogScreen() {
 
 function SessionRow({ dateKey, day, onSelect }: { dateKey: string; day: DayEntry; onSelect: () => void }) {
   const isOpen = day.session.endedAt === null;
-  const endLabel = isOpen ? 'مفتوح' : formatClock(day.session.endedAt as number);
+  const endLabel = isOpen ? 'مفتوح (قيد العمل)' : formatClock(day.session.endedAt as number);
 
   return (
     <button
       type="button"
-      disabled={isOpen}
       onClick={onSelect}
-      className="flex w-full items-center justify-between gap-3 rounded-2xl bg-surface px-4 py-3.5 text-start shadow-card transition active:scale-[0.99] disabled:active:scale-100"
+      className="flex w-full items-center justify-between gap-3 rounded-2xl bg-surface px-4 py-3.5 text-start shadow-card transition active:scale-[0.99]"
     >
       <div className="min-w-0">
-        <p className="text-sm font-medium text-ink">{formatDayLabel(dateKey)}</p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium text-ink">{formatDayLabel(dateKey)}</p>
+          {isOpen && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2 py-0.5 text-[11px] font-medium text-primary-700">
+              <span className="size-1.5 rounded-full bg-primary-600 animate-pulse" />
+              قيد العمل
+            </span>
+          )}
+        </div>
         <p className="mt-1 text-sm text-ink-muted tabular-nums">
           {formatClock(day.session.startedAt)} - {endLabel}
         </p>
       </div>
-      <div className="shrink-0 text-end">
-        <p className="text-sm font-medium text-primary-700 tabular-nums">
-          {isOpen ? 'قيد العمل' : `${formatEgp(day.earningsPiastres)} جنيه`}
-        </p>
-        <p className="mt-1 text-xs text-ink-muted">
-          {isOpen ? 'لم يُنتهِ بعد' : formatDuration(day.durationMs)}
-        </p>
+      <div className="shrink-0 flex items-center gap-2.5">
+        <div className="text-end">
+          <p className="text-sm font-medium text-primary-700 tabular-nums">
+            {isOpen ? 'قيد العمل' : `${formatEgp(day.earningsPiastres)} جنيه`}
+          </p>
+          <p className="mt-1 text-xs text-ink-muted">
+            {isOpen ? 'لم يُنتهِ بعد' : formatDuration(day.durationMs)}
+          </p>
+        </div>
+        <Pencil size={15} className="text-ink-muted/50 shrink-0" aria-hidden="true" />
       </div>
     </button>
   );

@@ -3,29 +3,58 @@ import { Trash2 } from 'lucide-react';
 import { Button, Field, FormError, inputClass } from '@/components/ui';
 import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
-import type { WorkSession } from '@/lib/db';
-import { deleteSession, updateSession } from '@/lib/repository';
+import { useNow } from '@/hooks/useNow';
+import type { RateRecord, WorkSession } from '@/lib/db';
+import { deleteSession, updateActiveSession, updateSession } from '@/lib/repository';
+import { sessionEarningsPiastres } from '@/lib/calculations';
 import { getErrorMessage } from '@/lib/errors';
-import { formatDuration } from '@/lib/format';
+import { formatDuration, formatEgp } from '@/lib/format';
 import { cairoDateKey, formatTimeInputValue, parseTimeInput, wallTimeToMs } from '@/lib/time';
 
 interface EditSessionSheetProps {
   session: WorkSession;
+  rates?: RateRecord[];
   onClose: () => void;
 }
 
-export function EditSessionSheet({ session, onClose }: EditSessionSheetProps) {
+export function EditSessionSheet({ session, rates = [], onClose }: EditSessionSheetProps) {
   const toast = useToast();
-  const endedAt = session.endedAt ?? session.startedAt;
+  const now = useNow();
+  const isOpen = session.endedAt === null;
+  const todayKey = cairoDateKey(now);
+
   const [startDate, setStartDate] = useState(() => cairoDateKey(session.startedAt));
   const [startTime, setStartTime] = useState(() => formatTimeInputValue(session.startedAt));
-  const [endDate, setEndDate] = useState(() => cairoDateKey(endedAt));
-  const [endTime, setEndTime] = useState(() => formatTimeInputValue(endedAt));
+  const [endDate, setEndDate] = useState(() => cairoDateKey(session.endedAt ?? session.startedAt));
+  const [endTime, setEndTime] = useState(() => formatTimeInputValue(session.endedAt ?? session.startedAt));
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  function buildTimes(): { startedAt: number; endedAt: number } | null {
+  // Active Session calculations
+  function buildActiveStart(): number | null {
+    if (!startDate || !startTime) return null;
+    const start = parseTimeInput(startTime);
+    return wallTimeToMs(startDate, start.hour, start.minute);
+  }
+
+  const activeStart = buildActiveStart();
+  const isActiveFuture = activeStart !== null && activeStart > now + 1000;
+  const isStartValid = activeStart !== null && !isActiveFuture;
+
+  let activePreviewText = '';
+  if (!startDate || !startTime) {
+    activePreviewText = 'اكتب تاريخ ووقت الوصول';
+  } else if (isActiveFuture) {
+    activePreviewText = 'وقت الوصول مينفعش يكون في المستقبل';
+  } else if (activeStart !== null) {
+    const elapsed = Math.max(0, now - activeStart);
+    const earnings = rates.length > 0 ? sessionEarningsPiastres({ startedAt: activeStart, endedAt: null }, rates, now) : null;
+    activePreviewText = `المدة لحد دلوقتي: ${formatDuration(elapsed)}${earnings !== null ? ` — الأجر: ${formatEgp(earnings)} جنيه` : ''}`;
+  }
+
+  // Completed Session calculations
+  function buildCompletedTimes(): { startedAt: number; endedAt: number } | null {
     if (!startDate || !startTime || !endDate || !endTime) return null;
     const start = parseTimeInput(startTime);
     const end = parseTimeInput(endTime);
@@ -35,23 +64,59 @@ export function EditSessionSheet({ session, onClose }: EditSessionSheetProps) {
     };
   }
 
-  const times = buildTimes();
-  const preview =
-    times && times.endedAt > times.startedAt
-      ? `مدة الشغل بعد التعديل: ${formatDuration(times.endedAt - times.startedAt)}`
-      : 'وقت المغادرة لازم يكون بعد وقت الوصول';
+  const completedTimes = buildCompletedTimes();
+  const isOrderValid = completedTimes !== null && completedTimes.endedAt > completedTimes.startedAt;
+  const isCompletedFuture = completedTimes !== null && completedTimes.endedAt > now + 1000;
+  const isCompletedValid = isOrderValid && !isCompletedFuture;
+
+  let completedPreviewText = '';
+  if (!startDate || !startTime || !endDate || !endTime) {
+    completedPreviewText = 'اكتب التاريخ والوقت كاملين';
+  } else if (!isOrderValid) {
+    completedPreviewText = 'وقت المغادرة لازم يكون بعد وقت الوصول';
+  } else if (isCompletedFuture) {
+    completedPreviewText = 'وقت المغادرة مينفعش يكون في المستقبل';
+  } else if (completedTimes !== null) {
+    const duration = completedTimes.endedAt - completedTimes.startedAt;
+    const earnings = rates.length > 0
+      ? sessionEarningsPiastres({ startedAt: completedTimes.startedAt, endedAt: completedTimes.endedAt }, rates, completedTimes.endedAt)
+      : null;
+    completedPreviewText = `مدة الشغل بعد التعديل: ${formatDuration(duration)}${earnings !== null ? ` — الأجر: ${formatEgp(earnings)} جنيه` : ''}`;
+  }
 
   async function handleSave(event: FormEvent) {
     event.preventDefault();
-    if (!times) {
-      setError('اكتب التاريخ والوقت كاملين');
-      return;
-    }
     setSaving(true);
     setError(null);
+
     try {
-      await updateSession(session.id as number, times.startedAt, times.endedAt);
-      toast('اتحفظ التعديل');
+      if (isOpen) {
+        if (!activeStart) {
+          setError('اكتب تاريخ ووقت الوصول');
+          return;
+        }
+        if (isActiveFuture) {
+          setError('وقت الوصول مينفعش يكون في المستقبل');
+          return;
+        }
+        await updateActiveSession(session.id as number, activeStart);
+        toast('اتحفظ وقت بدء اليوم');
+      } else {
+        if (!completedTimes) {
+          setError('اكتب التاريخ والوقت كاملين');
+          return;
+        }
+        if (!isOrderValid) {
+          setError('وقت المغادرة لازم يكون بعد وقت الوصول');
+          return;
+        }
+        if (isCompletedFuture) {
+          setError('وقت المغادرة مينفعش يكون في المستقبل');
+          return;
+        }
+        await updateSession(session.id as number, completedTimes.startedAt, completedTimes.endedAt);
+        toast('اتحفظ التعديل');
+      }
       onClose();
     } catch (caught) {
       setError(getErrorMessage(caught));
@@ -64,7 +129,7 @@ export function EditSessionSheet({ session, onClose }: EditSessionSheetProps) {
     setSaving(true);
     try {
       await deleteSession(session.id as number);
-      toast('اتحذف يوم الشغل');
+      toast(isOpen ? 'اتلغى يوم الشغل' : 'اتحذف يوم الشغل');
       onClose();
     } catch (caught) {
       setError(getErrorMessage(caught));
@@ -74,27 +139,87 @@ export function EditSessionSheet({ session, onClose }: EditSessionSheetProps) {
   }
 
   return (
-    <Sheet title="تعديل يوم الشغل" onClose={onClose}>
+    <Sheet title={isOpen ? 'تعديل وقت بدء اليوم' : 'تعديل يوم الشغل'} onClose={onClose}>
       <form onSubmit={handleSave} className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="تاريخ الوصول">
-            <input type="date" className={inputClass} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          </Field>
-          <Field label="وقت الوصول">
-            <input type="time" className={inputClass} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-          </Field>
-          <Field label="تاريخ المغادرة">
-            <input type="date" className={inputClass} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          </Field>
-          <Field label="وقت المغادرة">
-            <input type="time" className={inputClass} value={endTime} onChange={(e) => setEndTime(e.target.value)} />
-          </Field>
-        </div>
-        <p className="text-sm text-ink-muted">{preview}</p>
-        <FormError message={error} />
-        <Button type="submit" block disabled={saving || !times}>
-          حفظ التعديل
-        </Button>
+        {isOpen ? (
+          <>
+            <p className="text-sm leading-relaxed text-ink-muted">
+              يوم الشغل لسه شغال ومفتوح. لو نسيت تبدأ العداد في ميعادك، تقدر تظبط وقت الوصول هنا والعداد هيفضل مكمل عادي بدون توقف.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="تاريخ الوصول">
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={startDate}
+                  max={todayKey}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </Field>
+              <Field label="وقت الوصول">
+                <input
+                  type="time"
+                  className={inputClass}
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                />
+              </Field>
+            </div>
+            <p className={`text-sm ${isStartValid ? 'text-ink-muted' : 'text-error-700'}`}>
+              {activePreviewText}
+            </p>
+            <FormError message={error} />
+            <Button type="submit" block disabled={saving || !isStartValid}>
+              حفظ وقت الوصول
+            </Button>
+          </>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="تاريخ الوصول">
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={startDate}
+                  max={todayKey}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </Field>
+              <Field label="وقت الوصول">
+                <input
+                  type="time"
+                  className={inputClass}
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                />
+              </Field>
+              <Field label="تاريخ المغادرة">
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={endDate}
+                  max={todayKey}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </Field>
+              <Field label="وقت المغادرة">
+                <input
+                  type="time"
+                  className={inputClass}
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                />
+              </Field>
+            </div>
+            <p className={`text-sm ${isCompletedValid ? 'text-ink-muted' : 'text-error-700'}`}>
+              {completedPreviewText}
+            </p>
+            <FormError message={error} />
+            <Button type="submit" block disabled={saving || !isCompletedValid}>
+              حفظ التعديل
+            </Button>
+          </>
+        )}
       </form>
 
       <div className="mt-6 border-t border-line-soft pt-5">
@@ -110,7 +235,7 @@ export function EditSessionSheet({ session, onClose }: EditSessionSheetProps) {
         ) : (
           <Button variant="ghost" block onClick={() => setConfirmingDelete(true)}>
             <Trash2 size={18} />
-            حذف يوم الشغل
+            {isOpen ? 'إلغاء يوم الشغل' : 'حذف يوم الشغل'}
           </Button>
         )}
       </div>

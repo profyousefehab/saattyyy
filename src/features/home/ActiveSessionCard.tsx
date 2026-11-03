@@ -1,3 +1,4 @@
+import { Pencil } from 'lucide-react';
 import { Card } from '@/components/ui';
 import type { RateRecord, WorkSession } from '@/lib/db';
 import { sessionEarningsPiastres } from '@/lib/calculations';
@@ -8,9 +9,10 @@ interface ActiveSessionCardProps {
   active: WorkSession | undefined;
   rates: RateRecord[];
   now: number;
+  onEdit?: () => void;
 }
 
-export function ActiveSessionCard({ active, rates, now }: ActiveSessionCardProps) {
+export function ActiveSessionCard({ active, rates, now, onEdit }: ActiveSessionCardProps) {
   const isOpen = active !== undefined;
 
   return (
@@ -34,7 +36,20 @@ export function ActiveSessionCard({ active, rates, now }: ActiveSessionCardProps
           </p>
           <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
             <div>
-              <p className="text-ink-muted">وقت الوصول</p>
+              <div className="flex items-center justify-between">
+                <p className="text-ink-muted">وقت الوصول</p>
+                {onEdit && (
+                  <button
+                    type="button"
+                    onClick={onEdit}
+                    className="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-medium text-primary-700 hover:bg-primary-50 transition"
+                    aria-label="تعديل وقت الوصول"
+                  >
+                    <Pencil size={13} strokeWidth={2} />
+                    <span>تعديل</span>
+                  </button>
+                )}
+              </div>
               <p className="mt-1 font-medium text-ink tabular-nums">{formatClock(active.startedAt)}</p>
             </div>
             <div>
