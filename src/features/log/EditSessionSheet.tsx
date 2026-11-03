@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
-import { CalendarPlus, Trash2 } from 'lucide-react';
-import { Button, Field, FormError, IconButton, inputClass } from '@/components/ui';
+import { Trash2 } from 'lucide-react';
+import { Button, Field, FormError, inputClass } from '@/components/ui';
 import { Sheet } from '@/components/Sheet';
 import { useToast } from '@/components/Toast';
 import type { WorkSession } from '@/lib/db';

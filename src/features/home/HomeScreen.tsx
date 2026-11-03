@@ -31,10 +31,37 @@ export function HomeScreen({ onOpenSettings }: HomeScreenProps) {
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<SessionSummary | null>(null);
 
-  if (!ledger) return null;
-
   const todayKey = cairoDateKey(now);
   const monthKey = cairoMonthKey(now);
+
+  if (!ledger) {
+    return (
+      <div className="px-5 pt-[calc(env(safe-area-inset-top)+20px)] animate-fade-in">
+        <header className="flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="flex size-8 items-center justify-center rounded-xl bg-primary-600 text-white">
+                <Clock size={18} strokeWidth={2} />
+              </span>
+              <span className="text-sm font-semibold text-primary-700">ساعاتي</span>
+            </div>
+            <p className="mt-5 text-sm text-ink-muted">{formatDayLabel(todayKey)}</p>
+            <h1 className="mt-1 text-2xl font-semibold leading-tight text-ink">{getGreeting(now)}</h1>
+          </div>
+          <IconButton label="الإعدادات" onClick={onOpenSettings} className="-me-2">
+            <Settings size={22} strokeWidth={1.75} />
+          </IconButton>
+        </header>
+
+        <div className="mt-6 space-y-4">
+          <div className="h-44 rounded-[20px] bg-canvas-deep animate-pulse" />
+          <div className="h-32 rounded-[20px] bg-canvas-deep animate-pulse" />
+          <div className="h-14 rounded-2xl bg-canvas-deep animate-pulse" />
+        </div>
+      </div>
+    );
+  }
+
   const active = findActiveSession(ledger.sessions);
   const stale = findStaleSession(ledger.sessions, todayKey);
   const today = summarizeDay(ledger, todayKey, now);

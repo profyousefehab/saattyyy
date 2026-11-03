@@ -1,4 +1,4 @@
-import { db, type SettingRecord, type Settings, type SettingKey } from '@/lib/db';
+import { db, type SettingRecord, type Settings, type SettingKey, type WorkSession } from '@/lib/db';
 import { AppError } from '@/lib/errors';
 import { addDaysToDateKey, cairoDateKey, wallTimeToMs } from '@/lib/time';
 
@@ -8,11 +8,18 @@ export interface RateInput {
   note: string;
 }
 
+async function ensureDbOpen(): Promise<void> {
+  if (!db.isOpen()) {
+    await db.open();
+  }
+}
+
 function assertValidInterval(startedAt: number, endedAt: number) {
   if (endedAt <= startedAt) {
     throw new AppError('وقت المغادرة لازم يكون بعد وقت الوصول');
   }
-  if (endedAt > Date.now()) {
+  // Allow a tiny 1-second margin of clock drift between Date.now() calls
+  if (endedAt > Date.now() + 1000) {
     throw new AppError('وقت المغادرة مينفعش يكون في المستقبل');
   }
 }
@@ -31,17 +38,40 @@ async function assertNoOverlap(startedAt: number, endedAt: number, ignoreId?: nu
   }
 }
 
+/**
+ * Retrieve the current open session directly from IndexedDB.
+ */
+export async function getActiveSession(): Promise<WorkSession | undefined> {
+  await ensureDbOpen();
+  const openSessions = await db.sessions.filter((s) => s.endedAt === null).toArray();
+  if (openSessions.length === 0) return undefined;
+  return openSessions.sort((a, b) => b.startedAt - a.startedAt)[0];
+}
+
+/**
+ * Start a new work session.
+ * Saves the session's exact startedAt timestamp immediately to IndexedDB.
+ * Prevents creating duplicate active sessions.
+ */
 export async function startSession(startedAt: number): Promise<number> {
+  await ensureDbOpen();
+  const safeStartedAt = Math.min(startedAt, Date.now());
+
   return db.transaction('rw', db.sessions, async () => {
     const open = await db.sessions.filter((session) => session.endedAt === null).first();
     if (open) {
       throw new AppError('فيه يوم شغل مفتوح بالفعل');
     }
-    return db.sessions.add({ startedAt, endedAt: null });
+    const id = await db.sessions.add({ startedAt: safeStartedAt, endedAt: null });
+    return id as number;
   });
 }
 
+/**
+ * End an active work session.
+ */
 export async function endSession(id: number, endedAt: number): Promise<void> {
+  await ensureDbOpen();
   await db.transaction('rw', db.sessions, async () => {
     const session = await db.sessions.get(id);
     if (!session || session.endedAt !== null) {
@@ -54,6 +84,7 @@ export async function endSession(id: number, endedAt: number): Promise<void> {
 }
 
 export async function updateSession(id: number, startedAt: number, endedAt: number): Promise<void> {
+  await ensureDbOpen();
   await db.transaction('rw', db.sessions, async () => {
     const session = await db.sessions.get(id);
     if (!session || session.endedAt === null) {
@@ -66,6 +97,7 @@ export async function updateSession(id: number, startedAt: number, endedAt: numb
 }
 
 export async function addManualSession(startedAt: number, endedAt: number): Promise<void> {
+  await ensureDbOpen();
   await db.transaction('rw', [db.sessions, db.leaves], async () => {
     assertValidInterval(startedAt, endedAt);
     await assertNoOverlap(startedAt, endedAt);
@@ -78,6 +110,7 @@ export async function addManualSession(startedAt: number, endedAt: number): Prom
 }
 
 export async function deleteSession(id: number): Promise<void> {
+  await ensureDbOpen();
   await db.sessions.delete(id);
 }
 
@@ -89,6 +122,7 @@ async function assertRateStartIsFree(effectiveFrom: number, ignoreId?: number) {
 }
 
 export async function addRate(input: RateInput): Promise<void> {
+  await ensureDbOpen();
   await db.transaction('rw', db.rates, async () => {
     await assertRateStartIsFree(input.effectiveFrom);
     await db.rates.add(input);
@@ -96,6 +130,7 @@ export async function addRate(input: RateInput): Promise<void> {
 }
 
 export async function updateRate(id: number, input: RateInput): Promise<void> {
+  await ensureDbOpen();
   await db.transaction('rw', db.rates, async () => {
     await assertRateStartIsFree(input.effectiveFrom, id);
     await db.rates.update(id, input);
@@ -103,6 +138,7 @@ export async function updateRate(id: number, input: RateInput): Promise<void> {
 }
 
 export async function addLeave(dateKey: string): Promise<void> {
+  await ensureDbOpen();
   await db.transaction('rw', [db.leaves, db.sessions], async () => {
     const existing = await db.leaves.where('date').equals(dateKey).first();
     if (existing) {
@@ -119,10 +155,12 @@ export async function addLeave(dateKey: string): Promise<void> {
 }
 
 export async function deleteLeave(id: number): Promise<void> {
+  await ensureDbOpen();
   await db.leaves.delete(id);
 }
 
 export async function saveSettings(values: Settings): Promise<void> {
+  await ensureDbOpen();
   const rows: SettingRecord[] = (Object.keys(values) as SettingKey[]).map((key) => ({
     key,
     value: values[key],

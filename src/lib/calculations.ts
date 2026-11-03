@@ -86,10 +86,20 @@ export function sessionEarningsPiastres(session: WorkSession, rates: RateRecord[
   return sessionRateSegments(session, rates, now).reduce((sum, segment) => sum + segment.earningsPiastres, 0);
 }
 
+/**
+ * Returns the currently active (open) session, if any.
+ * If multiple open sessions exist due to corruption or stale data, returns the most recent one.
+ */
 export function findActiveSession(sessions: WorkSession[]): WorkSession | undefined {
-  return sessions.find((session) => session.endedAt === null);
+  const openSessions = sessions.filter((session) => session.endedAt === null);
+  if (openSessions.length === 0) return undefined;
+  return openSessions.sort((a, b) => b.startedAt - a.startedAt)[0];
 }
 
+/**
+ * Returns an open session that started on a previous Cairo day.
+ * Stale sessions must be ended or corrected before a new day can be started.
+ */
 export function findStaleSession(sessions: WorkSession[], todayKey: string): WorkSession | undefined {
   const active = findActiveSession(sessions);
   return active && cairoDateKey(active.startedAt) !== todayKey ? active : undefined;
@@ -115,6 +125,12 @@ export function summarizeDay(data: LedgerData, dateKey: string, now: number): Da
   };
 }
 
+/**
+ * Summarizes a given month.
+ * IMPORTANT: Unfinished sessions (endedAt === null) are included in the `days` list
+ * so they can be viewed in the log, but are NOT counted towards finalized earnings,
+ * hours worked, or worked day count until the session is formally ended.
+ */
 export function summarizeMonth(data: LedgerData, monthKey: string, now: number): MonthSummary {
   const days: DayEntry[] = data.sessions
     .filter((session) => cairoMonthKey(session.startedAt) === monthKey)
@@ -126,9 +142,11 @@ export function summarizeMonth(data: LedgerData, monthKey: string, now: number):
     }))
     .sort((a, b) => b.session.startedAt - a.session.startedAt);
 
-  const workedMs = days.reduce((sum, day) => sum + day.durationMs, 0);
-  const earningsPiastres = days.reduce((sum, day) => sum + day.earningsPiastres, 0);
-  const workedDayCount = new Set(days.map((day) => day.dateKey)).size;
+  // Only finalized (completed) sessions count towards the month's official earnings and hours
+  const completedDays = days.filter((day) => day.session.endedAt !== null);
+  const workedMs = completedDays.reduce((sum, day) => sum + day.durationMs, 0);
+  const earningsPiastres = completedDays.reduce((sum, day) => sum + day.earningsPiastres, 0);
+  const workedDayCount = new Set(completedDays.map((day) => day.dateKey)).size;
 
   const leaveUsed = data.leaves.filter((leave) => leave.date.startsWith(monthKey)).length;
   const leaveRemaining = Math.max(0, data.settings.leaveAllowance - leaveUsed);

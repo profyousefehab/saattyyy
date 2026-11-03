@@ -3,6 +3,7 @@ import { IconButton } from '@/components/ui';
 import { useLedger } from '@/hooks/useLedger';
 import { PlanningSection } from '@/features/settings/PlanningSection';
 import { RateSection } from '@/features/settings/RateSection';
+import { BackupSection } from '@/features/settings/BackupSection';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -25,6 +26,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
       <div className="mt-6 space-y-4 pb-10">
         <PlanningSection settings={ledger.settings} rates={ledger.rates} />
         <RateSection rates={ledger.rates} sessions={ledger.sessions} />
+        <BackupSection />
       </div>
     </div>
   );

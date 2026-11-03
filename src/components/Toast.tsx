@@ -47,6 +47,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useToast(): ShowToast {
   const show = useContext(ToastContext);
   if (!show) throw new Error('useToast must be used inside ToastProvider');

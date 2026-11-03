@@ -119,7 +119,7 @@ export function WorkLogScreen() {
 
 function SessionRow({ dateKey, day, onSelect }: { dateKey: string; day: DayEntry; onSelect: () => void }) {
   const isOpen = day.session.endedAt === null;
-  const endLabel = day.session.endedAt === null ? 'مفتوح' : formatClock(day.session.endedAt);
+  const endLabel = isOpen ? 'مفتوح' : formatClock(day.session.endedAt as number);
 
   return (
     <button
@@ -135,8 +135,12 @@ function SessionRow({ dateKey, day, onSelect }: { dateKey: string; day: DayEntry
         </p>
       </div>
       <div className="shrink-0 text-end">
-        <p className="text-sm font-medium text-primary-700 tabular-nums">{formatEgp(day.earningsPiastres)} جنيه</p>
-        <p className="mt-1 text-xs text-ink-muted">{formatDuration(day.durationMs)}</p>
+        <p className="text-sm font-medium text-primary-700 tabular-nums">
+          {isOpen ? 'قيد العمل' : `${formatEgp(day.earningsPiastres)} جنيه`}
+        </p>
+        <p className="mt-1 text-xs text-ink-muted">
+          {isOpen ? 'لم يُنتهِ بعد' : formatDuration(day.durationMs)}
+        </p>
       </div>
     </button>
   );

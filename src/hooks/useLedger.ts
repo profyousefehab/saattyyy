@@ -5,6 +5,9 @@ import { toSettings } from '@/lib/repository';
 
 export function useLedger(): LedgerData | undefined {
   return useLiveQuery(async (): Promise<LedgerData> => {
+    if (!db.isOpen()) {
+      await db.open();
+    }
     const [sessions, rates, leaves, settingRows] = await Promise.all([
       db.sessions.orderBy('startedAt').toArray(),
       db.rates.orderBy('effectiveFrom').toArray(),

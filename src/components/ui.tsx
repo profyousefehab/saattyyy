@@ -46,11 +46,11 @@ export function Card({ children, className = '' }: { children: ReactNode; classN
 }
 
 export const inputClass =
-  'block w-full min-h-11 rounded-xl border border-line bg-surface px-3.5 text-base text-ink outline-none transition focus:border-primary-500 focus:ring-4 focus:ring-primary-100';
+  'block w-full min-w-0 min-h-11 rounded-xl border border-line bg-surface px-3.5 text-base text-ink outline-none transition focus:border-primary-500 focus:ring-4 focus:ring-primary-100';
 
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className="mb-1.5 block text-sm font-medium text-ink-soft">{label}</span>
       {children}
       {hint && <span className="mt-1.5 block text-xs leading-relaxed text-ink-muted">{hint}</span>}

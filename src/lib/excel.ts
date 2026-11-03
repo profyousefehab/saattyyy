@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs';
+import type ExcelJS from 'exceljs';
 import { sessionRateSegments, summarizeMonth, type LedgerData, type RateSegment } from '@/lib/calculations';
 import { formatClock, formatDayLabel, formatMonthLabel } from '@/lib/time';
 
@@ -10,6 +10,7 @@ const HOURS_FORMAT = '0.00';
 const COLUMN_COUNT = 5;
 
 export async function exportMonthReport(monthKey: string, ledger: LedgerData): Promise<void> {
+  const ExcelJS = (await import('exceljs')).default;
   const now = Date.now();
   const summary = summarizeMonth(ledger, monthKey, now);
   const workbook = new ExcelJS.Workbook();
@@ -59,9 +60,9 @@ export async function exportMonthReport(monthKey: string, ledger: LedgerData): P
     sheet.getRow(row).values = [
       formatDayLabel(day.dateKey),
       formatClock(day.session.startedAt),
-      isOpen ? 'لسه مفتوح' : formatClock(day.session.endedAt as number),
-      day.durationMs / MS_PER_HOUR,
-      day.earningsPiastres / 100,
+      isOpen ? 'لسه مفتوح (غير نهائي)' : formatClock(day.session.endedAt as number),
+      isOpen ? 0 : day.durationMs / MS_PER_HOUR,
+      isOpen ? 0 : day.earningsPiastres / 100,
     ];
     sheet.getCell(row, 4).numFmt = HOURS_FORMAT;
     sheet.getCell(row, 5).numFmt = MONEY_FORMAT;
@@ -72,7 +73,7 @@ export async function exportMonthReport(monthKey: string, ledger: LedgerData): P
     row++;
   } else {
     row = addTotalRow(sheet, row, {
-      label: 'الإجمالي',
+      label: 'الإجمالي (للأيام المنتهية)',
       hours: summary.workedMs / MS_PER_HOUR,
       earnings: summary.earningsPiastres / 100,
       firstDataRow,
@@ -83,8 +84,9 @@ export async function exportMonthReport(monthKey: string, ledger: LedgerData): P
 
   row = addSectionTitle(sheet, row, 'الأجر حسب سعر الساعة');
   row = addHeaderRow(sheet, row, ['سعر الساعة (جنيه)', '', '', 'الساعات', 'الأجر (جنيه)']);
+  const completedDays = summary.days.filter((day) => day.session.endedAt !== null);
   const rateBreakdown = buildRateBreakdown(
-    summary.days.flatMap((day) => sessionRateSegments(day.session, ledger.rates, now)),
+    completedDays.flatMap((day) => sessionRateSegments(day.session, ledger.rates, now)),
   );
   const rateStartRow = row;
   for (const entry of rateBreakdown) {

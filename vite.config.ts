@@ -9,7 +9,15 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon.svg', 'apple-touch-icon.png'],
+      includeAssets: [
+        'icon.svg',
+        'favicon.ico',
+        'favicon.svg',
+        'apple-touch-icon.png',
+        'icons/icon-192.png',
+        'icons/icon-512.png',
+        'icons/icon-512-maskable.png',
+      ],
       manifest: {
         name: 'ساعاتي',
         short_name: 'ساعاتي',
@@ -23,13 +31,16 @@ export default defineConfig({
         background_color: '#FBFAF6',
         theme_color: '#FBFAF6',
         icons: [
+          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: '/icons/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,woff,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff,woff2}'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
       },
@@ -44,6 +55,6 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    exclude: ['lucide-react', '@electric-sql/pglite'],
+    exclude: ['lucide-react'],
   },
 });
